@@ -1,0 +1,11 @@
+node_modules/
+**/node_modules/
+dist/
+**/dist/
+.env
+.env.*
+!.env.example
+*.log
+coverage/
+data/mongodb/
+node_modules/.cache/mongodb-memory-server/
