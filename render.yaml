@@ -3,24 +3,35 @@ services:
     name: foodie-table
     runtime: node
     plan: free
+
     rootDir: FSD Project/FSD Project
+
     buildCommand: npm ci --include=dev && npm run build
     startCommand: npm start
+
     healthCheckPath: /api/health
+
     envVars:
       - key: NODE_ENV
         value: production
+
       - key: SESSION_SECRET
         generateValue: true
+
       - key: MONGODB_URI
         sync: false
+
       - key: ADMIN_USERNAME
         sync: false
+
       - key: ADMIN_EMAIL
         sync: false
+
       - key: ADMIN_PASSWORD
         sync: false
+
       - key: PAYMENT_CURRENCY
         value: INR
+
       - key: DELIVERY_FEE_CENTS
         value: "0"
