@@ -10,14 +10,27 @@ import dotenv from 'dotenv';
 import express, { NextFunction, Request, Response } from 'express';
 import { rateLimit } from 'express-rate-limit';
 import session from 'express-session';
-import * as helmetModule from 'helmet';
+import {
+  contentSecurityPolicy,
+  crossOriginOpenerPolicy,
+  crossOriginResourcePolicy,
+  originAgentCluster,
+  referrerPolicy,
+  strictTransportSecurity,
+  xContentTypeOptions,
+  xDnsPrefetchControl,
+  xDownloadOptions,
+  xFrameOptions,
+  xPermittedCrossDomainPolicies,
+  xPoweredBy,
+  xXssProtection,
+} from 'helmet';
 import mongoose from 'mongoose';
 import { z } from 'zod';
 import { AuditLog, ContactMessage, CustomerAddress, DiningTable, Notification, Order, Product, Reservation, ReservationSlot, User } from './models.js';
 import { canTransitionOrder, canTransitionReservation, reservationRange, reservationSlotStarts, reservationTimesOverlap } from './domain.js';
 
 const currentDirectory = path.dirname(fileURLToPath(import.meta.url));
-const helmet = helmetModule.default;
 dotenv.config({ path: path.resolve(currentDirectory, '../../.env') });
 
 declare module 'express-session' {
@@ -102,8 +115,8 @@ const DINING_TABLES = RESTAURANTS.flatMap((restaurant, index) => DINING_TABLE_LA
 const app = express();
 app.disable('x-powered-by');
 if (process.env.NODE_ENV === 'production') app.set('trust proxy', 1);
-app.use(helmet({
-  contentSecurityPolicy: {
+app.use(
+  contentSecurityPolicy({
     directives: {
       'style-src': ["'self'", "'unsafe-inline'", 'https://fonts.googleapis.com'],
       'font-src': ["'self'", 'https://fonts.gstatic.com', 'data:'],
@@ -112,8 +125,20 @@ app.use(helmet({
       'frame-src': ["'self'", 'https://api.razorpay.com', 'https://checkout.razorpay.com'],
       'img-src': ["'self'", 'data:', 'https://*.razorpay.com'],
     },
-  },
-}));
+  }),
+  crossOriginOpenerPolicy(),
+  crossOriginResourcePolicy(),
+  originAgentCluster(),
+  referrerPolicy(),
+  strictTransportSecurity(),
+  xContentTypeOptions(),
+  xDnsPrefetchControl(),
+  xDownloadOptions(),
+  xFrameOptions(),
+  xPermittedCrossDomainPolicies(),
+  xPoweredBy(),
+  xXssProtection(),
+);
 app.post('/api/payments/webhook', express.raw({ type: 'application/json', limit: '64kb' }), async (request, response) => {
   if (!RAZORPAY_WEBHOOK_SECRET) return response.status(503).json({ error: 'Payment webhook is not configured.' });
   const signature = request.header('x-razorpay-signature') || '';
