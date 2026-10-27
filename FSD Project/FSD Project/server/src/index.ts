@@ -8,15 +8,16 @@ import bcrypt from 'bcryptjs';
 import MongoStore from 'connect-mongo';
 import dotenv from 'dotenv';
 import express, { NextFunction, Request, Response } from 'express';
-import rateLimit from 'express-rate-limit';
+import { rateLimit } from 'express-rate-limit';
 import session from 'express-session';
-import helmet from 'helmet';
+import * as helmetModule from 'helmet';
 import mongoose from 'mongoose';
 import { z } from 'zod';
 import { AuditLog, ContactMessage, CustomerAddress, DiningTable, Notification, Order, Product, Reservation, ReservationSlot, User } from './models.js';
 import { canTransitionOrder, canTransitionReservation, reservationRange, reservationSlotStarts, reservationTimesOverlap } from './domain.js';
 
 const currentDirectory = path.dirname(fileURLToPath(import.meta.url));
+const helmet = helmetModule.default;
 dotenv.config({ path: path.resolve(currentDirectory, '../../.env') });
 
 declare module 'express-session' {
