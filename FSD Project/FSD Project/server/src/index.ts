@@ -53,8 +53,14 @@ const PAYMENT_CURRENCY = (process.env.PAYMENT_CURRENCY || 'INR').trim().toUpperC
 const DELIVERY_FEE_CENTS = Number(process.env.DELIVERY_FEE_CENTS || 0);
 const configuredClientOrigins = (process.env.CLIENT_ORIGIN || 'http://127.0.0.1:4000,http://127.0.0.1:4173,http://127.0.0.1:5173,http://localhost:4000,http://localhost:4173,http://localhost:5173')
   .split(',').map((origin) => origin.trim()).filter(Boolean);
+const vercelOrigins = [process.env.VERCEL_URL, process.env.VERCEL_BRANCH_URL, process.env.VERCEL_PROJECT_PRODUCTION_URL]
+  .map((host) => {
+    if (!host) return '';
+    try { return new URL(host.includes('://') ? host : `https://${host}`).origin; }
+    catch { return ''; }
+  }).filter(Boolean);
 const renderExternalOrigin = process.env.RENDER_EXTERNAL_URL ? new URL(process.env.RENDER_EXTERNAL_URL).origin : '';
-const CLIENT_ORIGINS = new Set([...configuredClientOrigins, renderExternalOrigin].filter(Boolean));
+const CLIENT_ORIGINS = new Set([...configuredClientOrigins, ...vercelOrigins, renderExternalOrigin].filter(Boolean));
 const TAX_RATE = 0.08;
 const SESSION_COOKIE = 'juniper.sid';
 const RESTAURANT_ID = 'juniper-table';
@@ -114,6 +120,14 @@ const DINING_TABLES = RESTAURANTS.flatMap((restaurant, index) => DINING_TABLE_LA
 
 const app = express();
 app.disable('x-powered-by');
+let appReady: Promise<void> | undefined;
+app.use((_request, response, next) => {
+  if (!appReady) return next();
+  void appReady.then(() => next(), (error: unknown) => {
+    console.error('The API could not start:', error instanceof Error ? error.message : error);
+    if (!response.headersSent) response.status(503).json({ error: 'The API is temporarily unavailable.' });
+  });
+});
 if (process.env.NODE_ENV === 'production') app.set('trust proxy', 1);
 app.use(
   contentSecurityPolicy({
@@ -1527,9 +1541,10 @@ app.get('/api/menu', async (_request, response, next) => {
   } catch (error) { return next(error); }
 });
 
+let localMongo: { getUri: (databaseName?: string) => string; stop: () => Promise<boolean> } | undefined;
+
 async function start(): Promise<void> {
   let mongoUri = MONGODB_URI;
-  let localMongo: { getUri: (databaseName?: string) => string; stop: () => Promise<boolean> } | undefined;
   if (!mongoUri && process.env.NODE_ENV !== 'production') {
     const { MongoMemoryServer } = await import('mongodb-memory-server-core');
     const mongoDataDirectory = path.join(tmpdir(), 'juniper-table-mongodb');
@@ -1686,23 +1701,33 @@ async function start(): Promise<void> {
     console.error('Request failed:', error instanceof Error ? error.message : 'Unknown server error');
     return response.status(500).json({ error: 'The request could not be completed.' });
   });
-
-  const listenHost = process.env.NODE_ENV === 'production' ? '0.0.0.0' : '127.0.0.1';
-  const httpServer = app.listen(PORT, listenHost, () => {
-    console.log('API ready at http://127.0.0.1:' + PORT);
-    console.log('MongoDB connected. Menu seed is available in the products collection.');
-  });
-
-  const shutdown = () => {
-    httpServer.close(() => {
-      void mongoose.disconnect().finally(() => localMongo?.stop()).finally(() => process.exit(0));
-    });
-  };
-  process.once('SIGINT', shutdown);
-  process.once('SIGTERM', shutdown);
 }
 
-start().catch((error: unknown) => {
-  console.error('The API could not start:', error instanceof Error ? error.message : error);
-  process.exitCode = 1;
-});
+appReady = start();
+
+if (process.env.VERCEL !== '1') {
+  void appReady.then(() => {
+    const listenHost = process.env.NODE_ENV === 'production' ? '0.0.0.0' : '127.0.0.1';
+    const httpServer = app.listen(PORT, listenHost, () => {
+      console.log('API ready at http://127.0.0.1:' + PORT);
+      console.log('MongoDB connected. Menu seed is available in the products collection.');
+    });
+
+    const shutdown = () => {
+      httpServer.close(() => {
+        void mongoose.disconnect().finally(() => localMongo?.stop()).finally(() => process.exit(0));
+      });
+    };
+    process.once('SIGINT', shutdown);
+    process.once('SIGTERM', shutdown);
+  }).catch((error: unknown) => {
+    console.error('The API could not start:', error instanceof Error ? error.message : error);
+    process.exitCode = 1;
+  });
+} else {
+  void appReady.catch((error: unknown) => {
+    console.error('The API could not start:', error instanceof Error ? error.message : error);
+  });
+}
+
+export default app;
